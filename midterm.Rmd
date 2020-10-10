@@ -1,0 +1,190 @@
+---
+title: "Midterm"
+author: "Weijia Hu"
+date: "2020/10/8"
+output: html_document
+---
+
+```{r}
+library(data.table)
+library(tidyverse)
+library(dplyr)
+library(knitr)
+library(usmap)
+```
+
+# Introduction
+In my project, I’m interested in the new cases and deaths of Covid-19. The new cases indicate how fast the virus spread and the deaths indicate how serious this disease is. 
+### The formulated questions are:
+1. Until 10/06/2020, which states contribute most to the new cases and deaths?
+2. Is there any association between the number of hospitalized patients and the number of deaths for COvid-19?
+3. After the National day holiday, did the number of daily new cases increase? 
+
+
+# Method
+### Read in the data: 
+My data are from the website of The COVID Tracking Project and about COVID-19 related data from all the states in USA. The investigators of this project would update the data each day. The date in my data set ranges from 01/22/2020 to 10/06/2020. The following codes are used to read in the data.
+
+```{r}
+cov = data.table::fread("E:/566/midterm/all-states-history.csv")
+cov_d = cov[cov$dataQualityGrade=='D']
+cov= cov[cov$dataQualityGrade!="D", ]
+cov_1006<- cov[date=='2020-10-06']
+```
+
+- There are 12138 rows and 43 columns in the raw data set. 
+
+- The investigators assigned every state a data-quality grade based on their evaluation of the completeness of states' reporting, I removed rows whose data-quality grades are D, which I think the data are not reliable. I stored these data in the data set named "cov_d". There are 400 observations in "cov_d" data set. Let's check states in this data set in recent days, in which the public health systems of Covid-19 are considered good enough. The states are American Samoa, Northern Mariana Islands and US Virgin Islands and they are not in the mainland USA.
+
+- After removing some observations, there are 11738 observations left.
+
+- In order to get the total cases and deaths in each state, observations whose date equal to 2020-10-06 were selected and stored in cov_1006. 
+
+### Take a look at the data:
+Use summary function to obtain important statistics.
+```{r}
+new_death <- cov[ ,c(1,2,4,6)]
+summary(new_death)
+new_case <- cov[ ,c(1,2,22,24)]
+summary(new_case)
+kable(summary(new_death))
+kable(summary(new_case))
+```
+
+- The date variable started at 01/22/2020. The first case in USA was found on 01/21/2020. So, our data made sense. 
+
+- Death, deathincrese, positive and positiveincrease ought to be positive numbers. However, the mininmum of deathincrease and positiveincrease are -213 and -7757, repectively. It didn't make sense. We need to remove these incorrect values. 
+
+### Remove incorrect values.
+```{r}
+cov$deathIncrease[cov$deathIncrease<0] <- NA
+cov$positiveIncrease[cov$positiveIncrease<0] <- NA
+summary(cov$deathIncrease)
+summary(cov$positiveIncrease)
+```
+
+- Now, all the values are positive, which makes sense. 
+
+
+
+
+### Graphs of new cases and deaths in the USA
+1.Total death number by states by 10/06/2020
+1.1 The bar charts
+I used ggplot2 package to draw two bar chart. One of them includes all states in the USA and another one includes states number of death is greater than 5000.
+```{r}
+cov_1006 %>%
+  filter(!(death %in% NA)) %>%
+  ggplot(aes(x= state, y=death, fill= state))+
+  geom_bar(stat='identity')
+cov_1006_1 <- cov_1006 [death>5000]
+cov_1006_1$state <-reorder(cov_1006_1$state, -cov_1006_1$death)
+cov_1006_1 %>%
+ggplot(aes(x= state, y=death, fill= state))+
+  geom_bar(stat='identity')+
+  geom_text(aes(label = death , vjust = -0.8, hjust = 0.5, color = state)) 
+```
+
+- First, take a look at the first bar chart. There are several states being in really terrible conditions. 
+
+- I picked states whose number of death is greater than 5000. Then sort them by their death descendingly. Among them, the New York has the highest total deaths number in the USA. The state of California, New Jersey and Texas have the similar numbers and are ranked second, third and fourth respectively. 
+
+
+1.2 The Map
+I used usmap package to draw a map. The darker its color is, the higher its number of deaths is. 
+```{r}
+cov_1006_d = as.data.frame(cov_1006)
+plot_usmap('states', data =cov_1006, values ='death')+
+scale_fill_continuous(low = "pink", high = "darkred", guide = F)+
+labs(title = "Total number of deaths related to Covid-19 in the USA")
+```
+
+2. Total case number by states
+2.1 The bar charts
+Similarly, two bar charts are shown.
+```{r}
+cov_1006 %>%
+  filter(!(death %in% NA)) %>%
+  ggplot(aes(x= state, y=positive, fill= state))+
+  geom_bar(stat='identity')
+  cov_1006_2 <- cov_1006 [positive>200000]
+  cov_1006_2$state <-reorder(cov_1006_2$state, -cov_1006_2$positive)
+  cov_1006_2 %>%
+ggplot(aes(x= state, y=positive, fill= state))+
+  geom_bar(stat='identity')+
+  geom_text(aes(label = positive , vjust = -0.8, hjust = 0.5, color = state))
+```
+
+- Take a look at the first bar chart. There are several states being in really terrible conditions. 
+
+- I picked states whose number of cases is greater than 20,000. Then sort them by their number of cases descendingly. Among them, the California state has the highest Covid-19-related cases, which is what we all know. Interestingly, the state of New York is only ranked forth, while it has the most deaths. 
+
+2.2 The Map
+Also, use usmap package to get a map and observe it more directly. 
+```{r}
+cov_1006_d = as.data.frame(cov_1006)
+plot_usmap('states', data =cov_1006, values ='positive')+
+scale_fill_continuous(low = "lightsteelblue", high = "blueviolet", guide = F)+
+labs(title = "Total number of cases related to Covid-19 in the USA")
+```
+
+3. Daily death by states
+Use 5 states with the highest number of deaths to analyze their daily death trends. 
+```{r}
+cov_death= cov [cov$state==c("NY","CA", "NJ","TX", "FL"), ]
+cov_death %>%
+  ggplot(mapping = aes(x= date, y=deathIncrease, color=state))+
+  geom_line(mapping=aes(color=state))+
+  stat_smooth(method = lm)+
+  facet_wrap(~state, nrow=3)
+```
+
+- We have 5 states here and they are California, New York, New Jersey, Texas and Florida. Only two of them have the decreasing smooth lines. But the cases in other three states increase slowly. Also their real lines went down recently, which is a good news. 
+
+4. Daily cases by states
+Use 5 states with the highest number of cases to analyze their daily death trends.
+```{r}
+cov_inci= cov [cov$state==c("CA", "TX","FL","NY", "GA","IL"), ]
+cov_inci %>%
+  ggplot(mapping = aes(x= date, y=positiveIncrease, color=state))+
+  geom_line(mapping=aes(color=state))+
+  stat_smooth(method = lm)+
+  facet_wrap(~state, nrow=3)
+```
+
+- Here, top six states were selected. They are California, Texas, Florida, New York, Georgia, and Illinois. The main trend of each state is downward. In California, Florida, Georgia and Texas, there are peaks in July and August. After the summer time, they went down. 
+
+5. The relationship between  the number of hospitalized patients and the number of deaths for COvid-19. 
+```{r}
+cov_1006 %>%
+  filter(!(state %in% NA)) %>%
+  ggplot(mapping = aes(x= hospitalized, y=death, color="red"))+
+  geom_point(shape=19)+
+  stat_smooth(method = 'lm')
+```
+- According to this scatter plot and its smooth line, the number of deaths and the number of hopitalization have a positive relation. Notice that the confidence intervals are getting lareger. It's because only some states have very high number of deaths. 
+
+6. The relationship between the National Day holiday and the number of new cases for COvid-19. 
+```{r}
+cov_2week <- cov[c(4736:5477), ]
+cov_2week_inci <-cov_2week[cov_2week$state==c("CA", "TX","FL","NY", "GA","IL"), ]
+cov_2week_inci %>%
+  ggplot(mapping = aes(x= date, y=positiveIncrease, color=state))+
+  geom_line(mapping=aes(color=state))+
+  facet_wrap(~state, nrow=3)
+```
+
+- I selected a week before and after the National Day to analyze this question. Only in Georgia, after the National Day holiday, the daily increase cases become more. So, I don't think there is any strong relationship between them.
+
+# Premilinary results 
+Now let's calculate summary statistics
+```{r}
+fin_cov <- cov[ ,c(1,2,4,6,22,24)]
+summary(fin_cov)
+kable(summary(fin_cov))
+```
+
+- The maximum of the daily increase cases is 17820 in a certain state. The mean of th increase for every single state is 879 cases per day. The maximum of the daily increase deaths is 951 in a certain state. The mean of th increase for every single state is 24.83 deaths per day. Based on this, the Covid-19 disease could spread fast but not cause so many deaths (but we still need to wear masks and keep social distance to prevent it!).
+
+# Conclusion
+Until 10/06/2020, the New York state has the highest number of deaths and the California state has the highest number of cases. And there is a positive association between the number of hospitalized patients and the number of deaths for COvid-19. In my analysis, there is no obvious evidence to show the National Day holiday causes increase in the daily new cases.
